@@ -1,0 +1,25 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Node / VSCode Extension
+node_modules/
+*.vsix
+out/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data
+*.csv
+!tests/fixtures/*.csv
+
+# Environment
+.env
