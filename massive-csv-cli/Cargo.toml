@@ -1,0 +1,14 @@
+[package]
+name = "massive-csv-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool for viewing, searching, and editing massive CSV files"
+license = "MIT"
+
+[[bin]]
+name = "massive-csv"
+path = "src/main.rs"
+
+[dependencies]
+massive-csv-core = { path = "../massive-csv-core" }
+clap = { version = "4", features = ["derive"] }

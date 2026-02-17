@@ -45,38 +45,47 @@ massive-csv/
 - **TypeScript** — VSCode extension
 - **napi-rs** — Rust ↔ Node.js bridge
 
-## Usage (Planned)
+## Usage
 
 ### CLI
 
 ```bash
-# View rows
-massive-csv view data.csv --rows 100-200
-
-# Search
-massive-csv search data.csv "error" --column status
-
-# File info
+# File info — row count, columns, size, delimiter
 massive-csv info data.csv
 
-# Edit interactively
-massive-csv edit data.csv
+# View rows as a formatted table
+massive-csv view data.csv                    # first 20 rows
+massive-csv view data.csv --rows 100-200     # specific range
+massive-csv view data.csv --rows 5000        # single row
+
+# Search across all columns
+massive-csv search data.csv "error"
+
+# Search with filters
+massive-csv search data.csv "error" --column status   # specific column
+massive-csv search data.csv "alice" -i                 # case-insensitive
+massive-csv search data.csv "error" -n 50              # limit results
+
+# Edit a specific cell
+massive-csv edit data.csv --row 15023 --col status --value "fixed"
+massive-csv edit data.csv --row 0 --col 3 --value "new"   # column by index
 ```
 
-### VSCode Extension
+### VSCode Extension (Planned)
 
 Open any `.csv` file — Massive CSV takes over with a fast, scrollable table view. Search, filter, edit cells, and save.
 
 ## Development Status
 
-**Phase:** Core Library (Phase 1)
+**Phase:** CLI Tool (Phase 2 complete)
 
 - [x] Project setup
-- [ ] Memory-mapped CSV reading
-- [ ] Line position indexing
-- [ ] Fast text search
-- [ ] Edit tracking & smart save
-- [ ] CLI tool
+- [x] Memory-mapped CSV reading
+- [x] Line position indexing (O(1) row access)
+- [x] Parallel text search (rayon)
+- [x] Edit tracking & atomic save
+- [x] Auto delimiter detection (comma, tab, semicolon, pipe)
+- [x] CLI tool (`info`, `view`, `search`, `edit`)
 - [ ] VSCode extension
 
 ## Building from Source
@@ -86,14 +95,17 @@ Open any `.csv` file — Massive CSV takes over with a fast, scrollable table vi
 git clone https://github.com/pedrosanzmtz/massive-csv.git
 cd massive-csv
 
-# Build core library
-cd massive-csv-core
+# Build everything
 cargo build --release
 
-# Build CLI
-cd ../massive-csv-cli
-cargo build --release
+# Or just the CLI
+cargo build -p massive-csv-cli --release
+
+# Run tests
+cargo test
 ```
+
+The binary is at `target/release/massive-csv`.
 
 ## Who Is This For?
 

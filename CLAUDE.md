@@ -82,20 +82,23 @@ Massive Data Tools
 massive-csv/
 ├── massive-csv-core/         # Rust library (core functionality)
 │   ├── src/
-│   │   ├── lib.rs
-│   │   ├── reader.rs         # Memory-mapped CSV reading
-│   │   ├── indexer.rs        # Line position indexing
-│   │   ├── searcher.rs       # Fast text search
-│   │   ├── editor.rs         # Smart editing & saving
-│   │   └── parser.rs         # CSV parsing utilities
+│   │   ├── lib.rs            # Public API re-exports
+│   │   ├── reader.rs         # Memory-mapped CSV reading + line indexing
+│   │   ├── searcher.rs       # Parallel text search (rayon)
+│   │   ├── editor.rs         # Edit tracking & atomic save
+│   │   ├── parser.rs         # CSV parsing, delimiter detection, serialization
+│   │   └── error.rs          # Error types (thiserror)
+│   ├── tests/
+│   │   └── integration.rs    # Full workflow integration tests
 │   └── Cargo.toml
 │
 ├── massive-csv-cli/          # CLI tool
 │   ├── src/
-│   │   └── main.rs           # Command-line interface
+│   │   ├── main.rs           # Clap subcommands: info, view, search, edit
+│   │   └── format.rs         # Table formatting, number/size display
 │   └── Cargo.toml
 │
-└── massive-csv-vscode/       # VSCode extension
+└── massive-csv-vscode/       # VSCode extension (planned)
     ├── src/
     │   ├── extension.ts      # Extension entry point
     │   ├── csvProvider.ts    # Custom editor provider
@@ -114,8 +117,7 @@ massive-csv/
 - **serde**: Serialization for API
 
 ### CLI
-- **clap**: Command-line argument parsing
-- **crossterm**: Terminal UI (optional for interactive mode)
+- **clap**: Command-line argument parsing (derive API)
 
 ### VSCode Extension
 - **TypeScript**: Extension code
@@ -124,46 +126,47 @@ massive-csv/
 
 ## Development Phases
 
-### Phase 1: Core Library (Week 1-2)
+### Phase 1: Core Library -- COMPLETE
 Build the Rust core that both CLI and extension will use.
 
 **Goals:**
 - [x] Memory-mapped CSV reading
-- [x] Line indexing (track byte position of each row)
-- [x] Basic search (find rows matching text)
-- [x] Read specific rows by line number
-- [ ] Edit tracking (which rows changed)
-- [ ] Smart save (rewrite only changed portions)
+- [x] Line indexing (track byte position of each row, O(1) access)
+- [x] Parallel search with rayon (column filter, case-insensitive, max results)
+- [x] Read specific rows by line number + range queries
+- [x] Auto delimiter detection (comma, tab, semicolon, pipe)
+- [x] CSV parsing with proper quoting (csv crate)
+- [x] Edit tracking (HashMap of row -> fields)
+- [x] Atomic save (temp file + rename)
+- [x] Error handling (thiserror)
+- [x] 28 tests (23 unit + 5 integration)
 
-**Files to create:**
-1. `csv-lens-core/src/reader.rs` - Memory-mapped CSV reader
-2. `csv-lens-core/src/indexer.rs` - Build/use line index
-3. `csv-lens-core/src/searcher.rs` - Search implementation
-4. `csv-lens-core/src/editor.rs` - Edit & save logic
+**Core API:**
+- `CsvReader::open(path)` — open file, build index, detect delimiter
+- `CsvReader::get_row(n)` / `get_rows(start, end)` — O(1) row access
+- `CsvReader::row_count()` / `headers()` / `delimiter()`
+- `search(reader, query, options)` — parallel search with `SearchOptions`
+- `CsvEditor::set_cell(row, col, value)` / `set_row(row, fields)`
+- `CsvEditor::save()` — atomic save, re-opens reader afterward
 
-### Phase 2: CLI Tool (Week 2-3)
+### Phase 2: CLI Tool -- COMPLETE
 Command-line interface for quick operations.
 
-**Commands:**
+**Subcommands:**
 ```bash
-# View rows
-massive-csv view data.csv --rows 100-200
-
-# Search
-massive-csv search data.csv "error" --column status
-
-# Interactive edit mode
-massive-csv edit data.csv
-
-# Info
-massive-csv info data.csv  # Show row count, columns, size
+massive-csv info data.csv                              # Row count, columns, size, delimiter
+massive-csv view data.csv --rows 100-200               # View rows as formatted table
+massive-csv search data.csv "error" -c status -i -n 50 # Search with filters
+massive-csv edit data.csv --row 15023 --col status --value "fixed"  # Edit cell
 ```
 
 **Goals:**
-- [ ] Basic viewing
-- [ ] Search and display results
-- [ ] Interactive editing (optional)
-- [ ] Performance testing with 2.3M row files
+- [x] `info` — file metadata (rows, columns, size, delimiter, headers, load time)
+- [x] `view` — formatted table output with row ranges
+- [x] `search` — parallel search with column filter, case-insensitive, max results
+- [x] `edit` — edit cell by column name or index, atomic save
+- [x] Table formatting (column-aligned, truncation, comma-separated row numbers)
+- [x] Error handling (invalid column, out of range, missing file)
 
 ### Phase 3: VSCode Extension (Week 3-5)
 Visual editor with table UI.
@@ -367,13 +370,11 @@ impl CsvReader {
 
 ## Current Status
 
-**Phase:** Planning & Design  
+**Phase:** Phase 2 complete (Core + CLI)
 **Next Steps:**
-1. Create project structure
-2. Implement csv-lens-core basics
-3. Test with a large 2.3M row CSV
-4. Build CLI proof-of-concept
-5. Design VSCode extension UI
+1. Phase 3: Build VSCode extension (custom editor, virtual scrolling, napi-rs bridge)
+2. Test with real 2.3M+ row CSV files for performance benchmarking
+3. Phase 4: Polish, undo/redo, publish to crates.io + VS Marketplace
 
 ## Notes for Claude
 

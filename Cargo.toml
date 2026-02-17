@@ -1,3 +1,3 @@
 [workspace]
-members = ["massive-csv-core"]
+members = ["massive-csv-core", "massive-csv-cli"]
 resolver = "2"
