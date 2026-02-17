@@ -54,7 +54,7 @@ massive-csv/
 massive-csv view data.csv --rows 100-200
 
 # Search
-massive-csv search data.csv "Nokia" --column vendor
+massive-csv search data.csv "error" --column status
 
 # File info
 massive-csv info data.csv
@@ -97,7 +97,7 @@ cargo build --release
 
 ## Who Is This For?
 
-- Data engineers working with telecom/IoT exports
+- Data engineers working with large exports
 - Backend developers dealing with large CSV dumps
 - DevOps engineers analyzing logs and metrics
 - Anyone frustrated with "file too large" errors

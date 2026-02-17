@@ -11,8 +11,8 @@
 **Purpose:** View, search, and edit large CSV files (1M+ rows, multi-GB) efficiently without loading entire file into memory
 
 **Key Use Case:**
-1. Open a 2.3M row telecom data CSV
-2. Search for specific values (e.g., cell ID, vendor, metric)
+1. Open a 2.3M row data CSV
+2. Search for specific values (e.g., ID, status, metric)
 3. View matching rows in context
 4. Edit specific rows as needed
 5. Save changes back efficiently
@@ -31,7 +31,7 @@
 - Brand: "Data engineering tools that scale"
 
 **Brand Story:**
-> "As a telecom data engineer dealing with 2.3M row CSVs and 63GB XML files, I couldn't find tools that actually worked. So I built them. **Massive Data Tools** - practical tools for engineers working with massive datasets."
+> "As a data engineer dealing with 2.3M row CSVs and 63GB XML files, I couldn't find tools that actually worked. So I built them. **Massive Data Tools** - practical tools for engineers working with massive datasets."
 
 **Positioning:**
 - Built by data engineers, for data engineers
@@ -41,7 +41,7 @@
 - The only VSCode extension that can actually edit massive CSVs
 
 **Target Users:**
-- Data engineers working with telecom/IoT data
+- Data engineers working with large datasets
 - Backend developers dealing with large exports
 - DevOps engineers analyzing logs and metrics
 - Analysts who outgrew Excel/Google Sheets
@@ -150,7 +150,7 @@ Command-line interface for quick operations.
 massive-csv view data.csv --rows 100-200
 
 # Search
-massive-csv search data.csv "Nokia" --column vendor
+massive-csv search data.csv "error" --column status
 
 # Interactive edit mode
 massive-csv edit data.csv
@@ -280,7 +280,7 @@ Begin with `massive-csv-core` - the foundation for both CLI and extension.
 **First milestone:** Read a CSV, build line index, jump to any row.
 
 ### 3. Test with Real Data
-Use your actual 2.3M row telecom CSV to validate:
+Use an actual 2.3M row CSV to validate:
 - Load time
 - Memory usage
 - Search speed
@@ -371,7 +371,7 @@ impl CsvReader {
 **Next Steps:**
 1. Create project structure
 2. Implement csv-lens-core basics
-3. Test with Pedro's 2.3M row telecom CSV
+3. Test with a large 2.3M row CSV
 4. Build CLI proof-of-concept
 5. Design VSCode extension UI
 
@@ -397,7 +397,7 @@ impl CsvReader {
 - Look at existing CSV extensions for UI patterns (then improve them)
 
 **Testing:**
-- Use Pedro's actual 2.3M row telecom data
+- Use actual large CSV data (2.3M+ rows)
 - Test on macOS (Pedro's platform)
 - Verify memory usage stays low
 - Benchmark search speed
