@@ -1,0 +1,17 @@
+[package]
+name = "massive-csv-core"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance core library for viewing and editing massive CSV files"
+license = "MIT"
+
+[dependencies]
+memmap2 = "0.9"
+csv = "1.4"
+rayon = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+tempfile = "3.20"
+
+[dev-dependencies]
+tempfile = "3.20"
