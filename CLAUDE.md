@@ -98,13 +98,23 @@ massive-csv/
 │   │   └── format.rs         # Table formatting, number/size display
 │   └── Cargo.toml
 │
-└── massive-csv-vscode/       # VSCode extension (planned)
+├── massive-csv-napi/         # napi-rs bridge (Rust ↔ Node.js)
+│   ├── src/
+│   │   └── lib.rs            # CsvDocument class wrapping CsvEditor
+│   ├── build.rs              # napi_build::setup()
+│   ├── Cargo.toml            # cdylib crate
+│   └── package.json          # @napi-rs/cli build scripts
+│
+└── massive-csv-vscode/       # VSCode extension
     ├── src/
-    │   ├── extension.ts      # Extension entry point
-    │   ├── csvProvider.ts    # Custom editor provider
-    │   └── backend.ts        # Rust backend bridge (napi-rs)
-    ├── webview/
-    │   └── index.html        # Table UI (virtual scrolling)
+    │   ├── extension.ts      # Extension entry point, registers custom editor
+    │   ├── csvEditorProvider.ts  # CustomReadonlyEditorProvider, webview ↔ napi messaging
+    │   └── backend.ts        # Loads native addon, exports CsvDocument interface
+    ├── media/
+    │   └── webview.html      # ag-Grid UI (virtual scrolling, rainbow columns, find widget)
+    ├── native/               # Compiled .node addon + JS/TS bindings (copied from napi build)
+    ├── dist/                 # Bundled extension (esbuild output)
+    ├── esbuild.mjs           # Bundle config
     └── package.json
 ```
 
@@ -119,10 +129,14 @@ massive-csv/
 ### CLI
 - **clap**: Command-line argument parsing (derive API)
 
+### napi-rs Bridge
+- **napi@3** + **napi-derive@3**: Rust ↔ Node.js bridge
+- **napi-build@2**: Build script
+
 ### VSCode Extension
 - **TypeScript**: Extension code
-- **napi-rs**: Rust ↔ Node.js bridge
-- **Handsontable** or **ag-Grid**: Virtual scrolling table UI
+- **esbuild**: Bundler (marks native addon as external)
+- **ag-Grid Community 32.x**: Virtual scrolling table (infinite row model, CDN-loaded)
 
 ## Development Phases
 
@@ -168,30 +182,45 @@ massive-csv edit data.csv --row 15023 --col status --value "fixed"  # Edit cell
 - [x] Table formatting (column-aligned, truncation, comma-separated row numbers)
 - [x] Error handling (invalid column, out of range, missing file)
 
-### Phase 3: VSCode Extension (Week 3-5)
+### Phase 3: VSCode Extension -- COMPLETE
 Visual editor with table UI.
 
 **Features:**
-- [ ] Custom editor for .csv files
-- [ ] Virtual scrolling table (show 100 rows at a time)
-- [ ] Search/filter UI
-- [ ] Cell editing
-- [ ] Save changes back to file
-- [ ] Status bar (row count, file size, load time)
+- [x] Custom editor for .csv/.tsv files (default priority)
+- [x] Virtual scrolling table via ag-Grid infinite row model (200-row blocks)
+- [x] Rainbow column colors (8-color palette, subtle cell tints + vivid header text)
+- [x] Search via Cmd+F find widget (VSCode-style overlay, column filter, case toggle)
+- [x] Search results dropdown with rainbow-colored fields, click to jump
+- [x] Cell editing (double-click to edit, changes tracked)
+- [x] Save via Cmd+S (atomic save through napi → CsvEditor)
+- [x] Minimal status bar (row/col/size/delimiter, current position, unsaved edit count)
+- [x] napi-rs bridge: CsvDocument class wrapping CsvEditor with Mutex for thread safety
+- [x] Monospace font, 22px row height, no cell borders — native VSCode feel
 
-**Goals:**
-1. Register custom editor for CSV files
-2. Create webview with table UI
-3. Bridge Rust backend via napi-rs
-4. Implement search/filter
-5. Implement editing & save
+**napi-rs Bridge API (`CsvDocument`):**
+- `CsvDocument.open(path)` → factory
+- `getInfo()` → `{ rowCount, headers, delimiter, filePath }`
+- `getRow(row)` → `string[]`
+- `getRows(start, end)` → `string[][]`
+- `search(query, options?)` → `{ rowNum, fields }[]`
+- `setCell(row, col, value)`, `setRow(row, fields)`
+- `revertRow(row)`, `revertAll()`
+- `save()`
+- `editCount` getter, `hasChanges` getter
 
-### Phase 4: Polish & Publish (Week 5-6)
-- [ ] Error handling & validation
+**Webview ↔ Extension Message Protocol:**
+- `ready` → `init` (headers, rowCount, delimiter, fileSize)
+- `getRows` → `rowData` (row chunks for infinite scroll)
+- `search` → `searchResults` (matching rows)
+- `editCell` → `editAck` (confirm edit, update count)
+- `save` → `saveComplete` (atomic save, refresh grid)
+- `revertAll` → `revertComplete` (clear edits, refresh grid)
+
+### Phase 4: Polish & Publish
 - [ ] Undo/redo for edits
-- [ ] Better UI/UX
+- [ ] Error handling & validation polish
+- [ ] Test with real 2.3M+ row CSV for performance benchmarking
 - [ ] Documentation
-- [ ] Tests
 - [ ] Publish CLI to crates.io
 - [ ] Publish extension to VS Marketplace
 
@@ -237,24 +266,31 @@ Start with Option A, optimize later if needed.
 ### VSCode Extension Architecture
 ```
 ┌─────────────────────────────────┐
-│  Webview (TypeScript + HTML)    │
-│  - Handsontable virtual grid    │
-│  - Displays 100 rows at a time  │
-│  - Sends edit events to ext     │
+│  Webview (ag-Grid + HTML/CSS)   │
+│  - Infinite row model           │
+│  - Rainbow column colors        │
+│  - Cmd+F find widget            │
+│  - Cmd+S save                   │
 └─────────────────────────────────┘
-         ↓ postMessage
+         ↕ postMessage
 ┌─────────────────────────────────┐
 │  Extension (TypeScript)          │
-│  - Custom editor provider       │
-│  - Handles file lifecycle       │
-│  - Bridges to Rust backend      │
+│  - CustomReadonlyEditorProvider │
+│  - Routes messages to napi      │
 └─────────────────────────────────┘
-         ↓ napi-rs
+         ↕ direct call
 ┌─────────────────────────────────┐
-│  Rust Backend (csv-lens-core)   │
+│  napi-rs Bridge (cdylib)        │
+│  - CsvDocument class            │
+│  - Mutex<CsvEditor> for safety  │
+└─────────────────────────────────┘
+         ↕ Rust API
+┌─────────────────────────────────┐
+│  massive-csv-core               │
 │  - Memory-mapped file reading   │
-│  - Line indexing                │
-│  - Search/edit operations       │
+│  - Line indexing + O(1) access  │
+│  - Parallel search (rayon)      │
+│  - Edit tracking + atomic save  │
 └─────────────────────────────────┘
 ```
 
@@ -269,25 +305,46 @@ Start with Option A, optimize later if needed.
 
 ## Getting Started
 
-### 1. Create Project Structure
+### Build Everything
 ```bash
-mkdir massive-csv && cd massive-csv
-cargo new --lib massive-csv-core
-cargo new massive-csv-cli
-mkdir -p massive-csv-vscode/src
+# Build Rust workspace (core + CLI + napi bridge)
+cargo build --workspace
+
+# Build napi native addon
+cd massive-csv-napi
+npm install
+npm run build                                          # arm64
+npx napi build --platform --release --target x86_64-apple-darwin  # x64
+
+# Copy native addon to extension
+cp massive-csv.darwin-*.node index.js index.d.ts ../massive-csv-vscode/native/
+
+# Build VSCode extension
+cd ../massive-csv-vscode
+npm install
+npm run build
 ```
 
-### 2. Start with Core Library
-Begin with `massive-csv-core` - the foundation for both CLI and extension.
+### Run Tests
+```bash
+cargo test --workspace   # 28 tests (23 unit + 5 integration)
+```
 
-**First milestone:** Read a CSV, build line index, jump to any row.
+### Launch Extension
+```bash
+# Option A: From VSCode debugger (recommended)
+# Open massive-csv/ in VSCode → Run and Debug → "Run Massive CSV Extension" → F5
 
-### 3. Test with Real Data
-Use an actual 2.3M row CSV to validate:
-- Load time
-- Memory usage
-- Search speed
-- Edit performance
+# Option B: From terminal
+code --extensionDevelopmentPath=/path/to/massive-csv/massive-csv-vscode
+```
+
+### Use the CLI
+```bash
+cargo run -p massive-csv-cli -- info data.csv
+cargo run -p massive-csv-cli -- search data.csv "error" -c status -i
+cargo run -p massive-csv-cli -- edit data.csv --row 42 --col status --value "fixed"
+```
 
 ## Code Examples
 
@@ -370,11 +427,10 @@ impl CsvReader {
 
 ## Current Status
 
-**Phase:** Phase 2 complete (Core + CLI)
+**Phase:** Phase 3 complete (Core + CLI + VSCode Extension)
 **Next Steps:**
-1. Phase 3: Build VSCode extension (custom editor, virtual scrolling, napi-rs bridge)
-2. Test with real 2.3M+ row CSV files for performance benchmarking
-3. Phase 4: Polish, undo/redo, publish to crates.io + VS Marketplace
+1. Test with real 2.3M+ row CSV files for performance benchmarking
+2. Phase 4: Undo/redo, polish, publish to crates.io + VS Marketplace
 
 ## Notes for Claude
 
@@ -392,10 +448,12 @@ impl CsvReader {
 - Focus on search + quick edits
 
 **For VSCode Extension:**
-- Start simple - just viewing first
-- Use proven libraries (Handsontable for virtual scrolling)
-- napi-rs for Rust bridge - it's well documented
-- Look at existing CSV extensions for UI patterns (then improve them)
+- Uses ag-Grid Community with infinite row model (not Handsontable)
+- napi-rs v3 bridge with Mutex<CsvEditor> for thread safety
+- Rainbow column colors (8-color One Dark palette) — Pedro prefers minimal, native-feeling UI
+- No toolbar — search via Cmd+F overlay, save via Cmd+S
+- Build: `cd massive-csv-napi && npm run build` then copy native/ files to extension
+- Node.js on Pedro's machine runs x64 (Rosetta) — build for both arm64 and x64
 
 **Testing:**
 - Use actual large CSV data (2.3M+ rows)

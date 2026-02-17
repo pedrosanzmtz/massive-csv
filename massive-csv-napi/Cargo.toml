@@ -1,0 +1,17 @@
+[package]
+name = "massive-csv-napi"
+version = "0.1.0"
+edition = "2021"
+description = "Node.js native addon for massive-csv via napi-rs"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+massive-csv-core = { path = "../massive-csv-core" }
+napi = { version = "3", default-features = false, features = ["napi6"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

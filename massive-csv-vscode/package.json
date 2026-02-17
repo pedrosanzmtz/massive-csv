@@ -1,0 +1,52 @@
+{
+  "name": "massive-csv",
+  "displayName": "Massive CSV",
+  "description": "View, search, and edit massive CSV files (millions of rows) with virtual scrolling",
+  "version": "0.1.0",
+  "publisher": "massive-data-tools",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science",
+    "Visualization"
+  ],
+  "keywords": [
+    "csv",
+    "large files",
+    "data",
+    "editor",
+    "virtual scrolling"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "massiveCsv.editor",
+        "displayName": "Massive CSV Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.csv"
+          },
+          {
+            "filenamePattern": "*.tsv"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0"
+  }
+}

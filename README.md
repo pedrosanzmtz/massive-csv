@@ -36,14 +36,16 @@ You have a 2.3M row CSV file. Excel can't open it. VSCode chokes on it. Online t
 massive-csv/
 ├── massive-csv-core/      # Rust library — memory-mapped reading, indexing, search, editing
 ├── massive-csv-cli/       # CLI tool — view, search, edit from the terminal
+├── massive-csv-napi/      # napi-rs bridge — Rust ↔ Node.js native addon
 └── massive-csv-vscode/    # VSCode extension — visual table editor with virtual scrolling
 ```
 
 ## Tech Stack
 
-- **Rust** — core engine (memmap2, csv, rayon)
-- **TypeScript** — VSCode extension
-- **napi-rs** — Rust ↔ Node.js bridge
+- **Rust** — core engine (memmap2, csv, rayon, thiserror)
+- **napi-rs v3** — Rust ↔ Node.js bridge (cdylib)
+- **TypeScript** — VSCode extension (esbuild bundled)
+- **ag-Grid Community** — virtual scrolling table (infinite row model)
 
 ## Usage
 
@@ -71,13 +73,20 @@ massive-csv edit data.csv --row 15023 --col status --value "fixed"
 massive-csv edit data.csv --row 0 --col 3 --value "new"   # column by index
 ```
 
-### VSCode Extension (Planned)
+### VSCode Extension
 
-Open any `.csv` file — Massive CSV takes over with a fast, scrollable table view. Search, filter, edit cells, and save.
+Open any `.csv` file — Massive CSV takes over with a fast, scrollable table view.
+
+- **Rainbow column colors** for visual distinction
+- **Virtual scrolling** — handles millions of rows, loads on demand
+- **Cmd+F** to search (with column filter and case toggle)
+- **Double-click** any cell to edit
+- **Cmd+S** to save atomically
+- Status bar shows row count, columns, file size, delimiter, and current position
 
 ## Development Status
 
-**Phase:** CLI Tool (Phase 2 complete)
+**Phase:** VSCode Extension (Phase 3 complete)
 
 - [x] Project setup
 - [x] Memory-mapped CSV reading
@@ -86,7 +95,10 @@ Open any `.csv` file — Massive CSV takes over with a fast, scrollable table vi
 - [x] Edit tracking & atomic save
 - [x] Auto delimiter detection (comma, tab, semicolon, pipe)
 - [x] CLI tool (`info`, `view`, `search`, `edit`)
-- [ ] VSCode extension
+- [x] napi-rs bridge (Rust ↔ Node.js)
+- [x] VSCode extension (custom editor, ag-Grid virtual scrolling, rainbow columns, find widget)
+- [ ] Undo/redo for edits
+- [ ] Publish to crates.io + VS Marketplace
 
 ## Building from Source
 
@@ -95,17 +107,27 @@ Open any `.csv` file — Massive CSV takes over with a fast, scrollable table vi
 git clone https://github.com/pedrosanzmtz/massive-csv.git
 cd massive-csv
 
-# Build everything
+# Build Rust workspace (core + CLI + napi bridge)
 cargo build --release
 
-# Or just the CLI
-cargo build -p massive-csv-cli --release
+# Run tests (28 tests: 23 unit + 5 integration)
+cargo test --workspace
 
-# Run tests
-cargo test
+# Build napi native addon
+cd massive-csv-napi
+npm install && npm run build
+
+# Copy native addon to extension
+cp massive-csv.darwin-*.node index.js index.d.ts ../massive-csv-vscode/native/
+
+# Build VSCode extension
+cd ../massive-csv-vscode
+npm install && npm run build
 ```
 
-The binary is at `target/release/massive-csv`.
+The CLI binary is at `target/release/massive-csv`.
+
+To launch the extension in development mode, open the project in VSCode and press F5 (uses `.vscode/launch.json`).
 
 ## Who Is This For?
 

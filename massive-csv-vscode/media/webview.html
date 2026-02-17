@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'nonce-{{nonce}}' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net;"
+  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Massive CSV</title>
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-grid.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-theme-balham.css"
+  />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--vscode-editor-font-family, 'Menlo', 'Monaco', 'Courier New', monospace);
+      font-size: var(--vscode-editor-font-size, 13px);
+      color: var(--vscode-editor-foreground, #ccc);
+      background: var(--vscode-editor-background, #1e1e1e);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* --- Find widget (VSCode-style overlay) --- */
+    .find-widget {
+      display: none;
+      position: absolute;
+      top: 0;
+      right: 28px;
+      z-index: 100;
+      background: var(--vscode-editorWidget-background, #252526);
+      border: 1px solid var(--vscode-editorWidget-border, #454545);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      padding: 4px 6px;
+      gap: 4px;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .find-widget.visible {
+      display: flex;
+    }
+
+    .find-widget input {
+      width: 220px;
+      padding: 3px 6px;
+      border: 1px solid var(--vscode-input-border, #3c3c3c);
+      background: var(--vscode-input-background, #3c3c3c);
+      color: var(--vscode-input-foreground, #ccc);
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .find-widget input:focus {
+      border-color: var(--vscode-focusBorder, #007acc);
+    }
+
+    .find-widget select {
+      padding: 3px 4px;
+      border: 1px solid var(--vscode-input-border, #3c3c3c);
+      background: var(--vscode-input-background, #3c3c3c);
+      color: var(--vscode-input-foreground, #ccc);
+      font-size: 11px;
+      outline: none;
+    }
+
+    .find-widget .find-btn {
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      color: var(--vscode-foreground, #ccc);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .find-widget .find-btn:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+    }
+
+    .find-widget .find-btn.active {
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #fff);
+    }
+
+    .find-widget .find-count {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground, #858585);
+      white-space: nowrap;
+      min-width: 50px;
+    }
+
+    /* --- Search results dropdown --- */
+    .search-results {
+      display: none;
+      position: absolute;
+      top: 32px;
+      right: 28px;
+      z-index: 99;
+      width: 500px;
+      max-height: 300px;
+      overflow-y: auto;
+      background: var(--vscode-editorWidget-background, #252526);
+      border: 1px solid var(--vscode-editorWidget-border, #454545);
+      border-radius: 0 0 4px 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .search-results.visible { display: block; }
+
+    .search-result-row {
+      padding: 2px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 20px;
+    }
+
+    .search-result-row:hover {
+      background: var(--vscode-list-hoverBackground, #2a2d2e);
+    }
+
+    .search-result-row .row-num {
+      color: var(--vscode-editorLineNumber-foreground, #858585);
+      display: inline-block;
+      min-width: 55px;
+      text-align: right;
+      margin-right: 8px;
+    }
+
+    /* --- Grid fills everything --- */
+    .grid-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* --- Minimal status bar (like VSCode's) --- */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 10px;
+      height: 22px;
+      background: var(--vscode-statusBar-background, #007acc);
+      color: var(--vscode-statusBar-foreground, #fff);
+      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, sans-serif);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .status-bar .spacer { flex: 1; }
+
+    /* --- ag-Grid: native VSCode look + rainbow columns --- */
+    .ag-theme-balham-dark {
+      --ag-background-color: var(--vscode-editor-background, #1e1e1e);
+      --ag-header-background-color: var(--vscode-editor-background, #1e1e1e);
+      --ag-odd-row-background-color: transparent;
+      --ag-even-row-background-color: transparent;
+      --ag-row-hover-color: var(--vscode-list-hoverBackground, #2a2d2e);
+      --ag-foreground-color: var(--vscode-editor-foreground, #ccc);
+      --ag-border-color: transparent;
+      --ag-header-foreground-color: var(--vscode-foreground, #ccc);
+      --ag-cell-horizontal-border: none;
+      --ag-row-border-color: transparent;
+      --ag-selected-row-background-color: var(--vscode-list-activeSelectionBackground, #094771);
+      --ag-range-selection-border-color: var(--vscode-focusBorder, #007acc);
+      --ag-font-family: var(--vscode-editor-font-family, 'Menlo', 'Monaco', 'Courier New', monospace);
+      --ag-font-size: var(--vscode-editor-font-size, 13px);
+      --ag-header-height: 28px;
+      --ag-row-height: 22px;
+      --ag-header-column-separator-display: none;
+      --ag-column-border: none;
+    }
+
+    .ag-theme-balham-dark .ag-header {
+      border-bottom: 1px solid var(--vscode-editorWidget-border, #333);
+    }
+
+    .ag-theme-balham-dark .ag-header-cell {
+      font-weight: bold;
+      font-size: 12px;
+    }
+
+    .edited-cell {
+      background-color: rgba(255, 200, 50, 0.12) !important;
+    }
+
+    /* Rainbow column colors — subtle tinted backgrounds */
+    .col-rainbow-0 { background-color: rgba(209, 154, 102, 0.08); }
+    .col-rainbow-1 { background-color: rgba(97, 175, 239, 0.08); }
+    .col-rainbow-2 { background-color: rgba(152, 195, 121, 0.08); }
+    .col-rainbow-3 { background-color: rgba(198, 120, 221, 0.08); }
+    .col-rainbow-4 { background-color: rgba(86, 182, 194, 0.08); }
+    .col-rainbow-5 { background-color: rgba(224, 108, 117, 0.08); }
+    .col-rainbow-6 { background-color: rgba(229, 192, 123, 0.08); }
+    .col-rainbow-7 { background-color: rgba(130, 170, 255, 0.08); }
+
+    /* Rainbow header text colors — more vivid */
+    .col-header-0 { color: rgb(209, 154, 102) !important; }
+    .col-header-1 { color: rgb(97, 175, 239) !important; }
+    .col-header-2 { color: rgb(152, 195, 121) !important; }
+    .col-header-3 { color: rgb(198, 120, 221) !important; }
+    .col-header-4 { color: rgb(86, 182, 194) !important; }
+    .col-header-5 { color: rgb(224, 108, 117) !important; }
+    .col-header-6 { color: rgb(229, 192, 123) !important; }
+    .col-header-7 { color: rgb(130, 170, 255) !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Find widget (hidden by default, Cmd+F to show) -->
+  <div class="grid-container">
+    <div class="find-widget" id="findWidget">
+      <input type="text" id="searchInput" placeholder="Find" />
+      <select id="columnFilter">
+        <option value="">All</option>
+      </select>
+      <button class="find-btn" id="caseToggle" title="Match Case">Aa</button>
+      <span class="find-count" id="findCount"></span>
+      <button class="find-btn" id="closeFind" title="Close (Escape)">&times;</button>
+    </div>
+
+    <div class="search-results" id="searchPanel">
+      <div id="searchResultsList"></div>
+    </div>
+
+    <div id="grid" class="ag-theme-balham-dark" style="width: 100%; height: 100%;"></div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span id="statusInfo">Loading...</span>
+    <span class="spacer"></span>
+    <span id="statusEditsWrap" style="display:none">
+      <span id="statusEdits">0</span> unsaved edits
+    </span>
+    <span id="statusPosition"></span>
+  </div>
+
+  <script
+    nonce="{{nonce}}"
+    src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.js"
+  ></script>
+
+  <script nonce="{{nonce}}">
+    const vscode = acquireVsCodeApi();
+
+    let gridApi = null;
+    let headers = [];
+    let totalRows = 0;
+    let editedCells = new Map();
+    let pendingRequests = new Map();
+    let requestIdCounter = 0;
+    let caseSensitive = true;
+
+    const BLOCK_SIZE = 200;
+    const RAINBOW_COUNT = 8;
+
+    const datasource = {
+      getRows(params) {
+        const requestId = requestIdCounter++;
+        pendingRequests.set(requestId, params);
+        vscode.postMessage({
+          type: "getRows",
+          requestId,
+          start: params.startRow,
+          end: params.endRow,
+        });
+      },
+    };
+
+    // --- Messages from extension ---
+    window.addEventListener("message", (event) => {
+      const msg = event.data;
+      switch (msg.type) {
+        case "init": handleInit(msg); break;
+        case "rowData": handleRowData(msg); break;
+        case "searchResults": handleSearchResults(msg); break;
+        case "editAck": handleEditAck(msg); break;
+        case "saveComplete": handleSaveComplete(msg); break;
+        case "revertComplete": handleRevertComplete(msg); break;
+      }
+    });
+
+    function handleInit(msg) {
+      headers = msg.headers;
+      totalRows = msg.rowCount;
+
+      // Status bar
+      const delim = msg.delimiter === "\t" ? "Tab" : msg.delimiter === "," ? "Comma" : msg.delimiter === ";" ? "Semicolon" : msg.delimiter === "|" ? "Pipe" : msg.delimiter;
+      document.getElementById("statusInfo").textContent =
+        `${totalRows.toLocaleString()} rows, ${headers.length} cols, ${msg.fileSize}, ${delim} delimited`;
+
+      // Column filter
+      const select = document.getElementById("columnFilter");
+      headers.forEach((h) => {
+        const opt = document.createElement("option");
+        opt.value = h;
+        opt.textContent = h;
+        select.appendChild(opt);
+      });
+
+      // Column definitions with rainbow colors
+      const columnDefs = [
+        {
+          headerName: "",
+          valueGetter: (p) =>
+            p.node && p.node.rowIndex != null
+              ? String(p.node.rowIndex + 1)
+              : "",
+          width: 65,
+          pinned: "left",
+          editable: false,
+          suppressSizeToFit: true,
+          cellStyle: {
+            color: "var(--vscode-editorLineNumber-foreground, #858585)",
+            textAlign: "right",
+            paddingRight: "12px",
+          },
+          headerClass: "",
+        },
+        ...headers.map((h, i) => {
+          const colorIdx = i % RAINBOW_COUNT;
+          return {
+            headerName: h,
+            field: `col_${i}`,
+            editable: true,
+            minWidth: 80,
+            cellClass: `col-rainbow-${colorIdx}`,
+            headerClass: `col-header-${colorIdx}`,
+            cellClassRules: {
+              "edited-cell": (p) => {
+                if (!p.node || p.node.rowIndex == null) return false;
+                return editedCells.has(`${p.node.rowIndex}:${i}`);
+              },
+            },
+          };
+        }),
+      ];
+
+      const gridOptions = {
+        columnDefs,
+        rowModelType: "infinite",
+        datasource,
+        cacheBlockSize: BLOCK_SIZE,
+        maxBlocksInCache: 50,
+        infiniteInitialRowCount: totalRows,
+        maxConcurrentDatasourceRequests: 2,
+        rowBuffer: 100,
+        suppressCellFocus: false,
+        defaultColDef: {
+          resizable: true,
+          sortable: false,
+          filter: false,
+        },
+        onCellValueChanged: (event) => {
+          if (event.oldValue === event.newValue) return;
+          const rowIndex = event.node.rowIndex;
+          const colIndex = headers.indexOf(event.colDef.headerName);
+          if (rowIndex == null || colIndex < 0) return;
+          editedCells.set(`${rowIndex}:${colIndex}`, event.newValue);
+          vscode.postMessage({
+            type: "editCell",
+            row: rowIndex,
+            col: colIndex,
+            value: event.newValue || "",
+          });
+        },
+        onCellFocused: (event) => {
+          if (event.rowIndex != null) {
+            const col = event.column ? event.column.getColDef().headerName : "";
+            document.getElementById("statusPosition").textContent =
+              `Row ${(event.rowIndex + 1).toLocaleString()}${col ? ", " + col : ""}`;
+          }
+        },
+        getRowId: (params) => String(params.data?._rowIndex ?? params.level),
+      };
+
+      gridApi = agGrid.createGrid(document.getElementById("grid"), gridOptions);
+    }
+
+    function handleRowData(msg) {
+      const params = pendingRequests.get(msg.requestId);
+      if (!params) return;
+      pendingRequests.delete(msg.requestId);
+
+      const rowData = msg.rows.map((fields, i) => {
+        const row = { _rowIndex: msg.start + i };
+        fields.forEach((val, ci) => { row[`col_${ci}`] = val; });
+        return row;
+      });
+
+      const lastRow =
+        rowData.length < params.endRow - params.startRow
+          ? params.startRow + rowData.length
+          : totalRows;
+
+      params.successCallback(rowData, lastRow);
+    }
+
+    function handleSearchResults(msg) {
+      const panel = document.getElementById("searchPanel");
+      const list = document.getElementById("searchResultsList");
+      const count = document.getElementById("findCount");
+
+      count.textContent = `${msg.results.length.toLocaleString()} results`;
+
+      if (msg.results.length === 0) {
+        panel.classList.remove("visible");
+        return;
+      }
+
+      panel.classList.add("visible");
+      list.innerHTML = "";
+
+      msg.results.forEach((result) => {
+        const div = document.createElement("div");
+        div.className = "search-result-row";
+
+        // Color each field with rainbow colors
+        const fieldsHtml = result.fields
+          .map((f, i) => {
+            const colorIdx = i % RAINBOW_COUNT;
+            return `<span class="col-header-${colorIdx}">${escapeHtml(f)}</span>`;
+          })
+          .join(" <span style='opacity:0.3'>|</span> ");
+
+        div.innerHTML =
+          `<span class="row-num">${(result.rowNum + 1).toLocaleString()}</span>${fieldsHtml}`;
+
+        div.addEventListener("click", () => {
+          if (gridApi) gridApi.ensureIndexVisible(result.rowNum, "middle");
+        });
+        list.appendChild(div);
+      });
+    }
+
+    function handleEditAck(msg) {
+      const wrap = document.getElementById("statusEditsWrap");
+      const el = document.getElementById("statusEdits");
+      el.textContent = msg.editCount;
+      wrap.style.display = msg.editCount > 0 ? "" : "none";
+    }
+
+    function handleSaveComplete(msg) {
+      editedCells.clear();
+      document.getElementById("statusEdits").textContent = "0";
+      document.getElementById("statusEditsWrap").style.display = "none";
+      if (msg.rowCount !== totalRows) {
+        totalRows = msg.rowCount;
+      }
+      if (gridApi) gridApi.refreshInfiniteCache();
+    }
+
+    function handleRevertComplete() {
+      editedCells.clear();
+      document.getElementById("statusEdits").textContent = "0";
+      document.getElementById("statusEditsWrap").style.display = "none";
+      if (gridApi) gridApi.refreshInfiniteCache();
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // --- Find widget ---
+    const findWidget = document.getElementById("findWidget");
+    const searchInput = document.getElementById("searchInput");
+    const caseBtn = document.getElementById("caseToggle");
+
+    function showFind() {
+      findWidget.classList.add("visible");
+      searchInput.focus();
+      searchInput.select();
+    }
+
+    function hideFind() {
+      findWidget.classList.remove("visible");
+      document.getElementById("searchPanel").classList.remove("visible");
+      document.getElementById("findCount").textContent = "";
+    }
+
+    function doSearch() {
+      const query = searchInput.value.trim();
+      if (!query) return;
+      const column = document.getElementById("columnFilter").value || undefined;
+      vscode.postMessage({
+        type: "search",
+        query,
+        column,
+        caseSensitive,
+        maxResults: 1000,
+      });
+    }
+
+    caseBtn.addEventListener("click", () => {
+      caseSensitive = !caseSensitive;
+      caseBtn.classList.toggle("active", caseSensitive);
+      if (searchInput.value.trim()) doSearch();
+    });
+
+    document.getElementById("closeFind").addEventListener("click", hideFind);
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doSearch();
+      if (e.key === "Escape") hideFind();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", (e) => {
+      // Cmd/Ctrl+F → find
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        showFind();
+      }
+      // Cmd/Ctrl+S → save
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        vscode.postMessage({ type: "save" });
+      }
+      // Escape → close find
+      if (e.key === "Escape") {
+        hideFind();
+      }
+    });
+
+    vscode.postMessage({ type: "ready" });
+  </script>
+</body>
+</html>
